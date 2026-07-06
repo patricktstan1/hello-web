@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Guestbook</title>
+<style>
+  :root {
+    color-scheme: light dark;
+  }
+  body {
+    max-width: 40rem;
+    margin: 3rem auto;
+    padding: 0 1.5rem;
+    font-family: Georgia, "Times New Roman", serif;
+    color: #222;
+  }
+  h1 {
+    color: #7a1f2b;
+  }
+  form {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  input[type="text"] {
+    flex: 1;
+    padding: 0.5rem;
+    font-size: 1rem;
+  }
+  button {
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  ul {
+    list-style: none;
+    padding: 0;
+  }
+  li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+  }
+  #status {
+    color: #b00020;
+    min-height: 1.2em;
+  }
+  a.back {
+    display: inline-block;
+    margin-top: 2rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    body {
+      color: #eee;
+    }
+    h1 {
+      color: #f2c14e;
+    }
+  }
+</style>
+</head>
+<body>
+  <h1>Guestbook</h1>
+
+  <form id="guestbook-form">
+    <input type="text" id="message-input" placeholder="Leave a message" maxlength="500" required />
+    <button type="submit">Sign</button>
+  </form>
+
+  <p id="status"></p>
+
+  <ul id="messages"></ul>
+
+  <a class="back" href="/">&larr; Back home</a>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+    const form = document.getElementById('guestbook-form');
+    const input = document.getElementById('message-input');
+    const list = document.getElementById('messages');
+    const status = document.getElementById('status');
+
+    function renderMessages(messages) {
+      list.innerHTML = '';
+      for (const msg of messages) {
+        const li = document.createElement('li');
+        const time = new Date(msg.created_at).toLocaleString();
+        li.textContent = `${msg.content} — ${time}`;
+        list.appendChild(li);
+      }
+    }
+
+    async function main() {
+      const configRes = await fetch('/api/config');
+      const { url, anonKey } = await configRes.json();
+
+      if (!url || !anonKey) {
+        status.textContent = 'Supabase is not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY in the Vercel project settings.';
+        form.querySelector('button').disabled = true;
+        return;
+      }
+
+      const supabase = createClient(url, anonKey);
+
+      async function loadMessages() {
+        const { data, error } = await supabase
+          .from('messages')
+          .select('id, content, created_at')
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          status.textContent = `Error loading messages: ${error.message}`;
+          return;
+        }
+        renderMessages(data);
+      }
+
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const content = input.value.trim();
+        if (!content) return;
+
+        const { error } = await supabase.from('messages').insert({ content });
+        if (error) {
+          status.textContent = `Error posting message: ${error.message}`;
+          return;
+        }
+        input.value = '';
+        status.textContent = '';
+        await loadMessages();
+      });
+
+      await loadMessages();
+    }
+
+    main();
+  </script>
+</body>
+</html>
